@@ -1,0 +1,153 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuickBallot Voting</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      font-family: Arial, sans-serif;
+      background: #eef2ff;
+      color: #172554;
+    }
+    .card {
+      width: 100%;
+      max-width: 460px;
+      padding: 30px;
+      border-radius: 18px;
+      background: white;
+      box-shadow: 0 12px 35px #17255418;
+    }
+    h1 { margin-top: 0; }
+    p { color: #475569; line-height: 1.5; }
+    .option {
+      display: block;
+      padding: 14px;
+      margin: 10px 0;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+    .option:has(input:checked) {
+      border-color: #4f46e5;
+      background: #eef2ff;
+    }
+    button {
+      width: 100%;
+      padding: 14px;
+      margin-top: 12px;
+      border: 0;
+      border-radius: 10px;
+      background: #4338ca;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.6; cursor: wait; }
+    #message { min-height: 24px; margin-top: 16px; }
+    #results { padding-left: 20px; line-height: 1.8; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>QuickBallot</h1>
+    <p>Choose your preferred technology and submit your vote.</p>
+
+    <form id="vote-form">
+      <label class="option">
+        <input type="radio" name="option" value="AWS" required>
+        AWS
+      </label>
+      <label class="option">
+        <input type="radio" name="option" value="Docker">
+        Docker
+      </label>
+      <label class="option">
+        <input type="radio" name="option" value="Kubernetes">
+        Kubernetes
+      </label>
+      <button id="vote-button" type="submit">Submit Vote</button>
+    </form>
+
+    <p id="message" role="status" aria-live="polite"></p>
+
+    <h2>Live Results</h2>
+    <ul id="results">
+      <li>Loading results...</li>
+    </ul>
+    <button id="refresh-button" type="button">Refresh Results</button>
+  </main>
+
+  <script>
+    const API_URL = "http://localhost:8000";
+    const form = document.getElementById("vote-form");
+    const message = document.getElementById("message");
+    const resultsList = document.getElementById("results");
+    const voteButton = document.getElementById("vote-button");
+
+    async function loadResults() {
+      try {
+        const response = await fetch(`${API_URL}/results`);
+        if (!response.ok) throw new Error("Could not load results");
+
+        const results = await response.json();
+        resultsList.replaceChildren();
+
+        for (const option of ["AWS", "Docker", "Kubernetes"]) {
+          const item = document.createElement("li");
+          item.textContent = `${option}: ${results[option] ?? 0} votes`;
+          resultsList.appendChild(item);
+        }
+      } catch {
+        resultsList.textContent = "";
+        const item = document.createElement("li");
+        item.textContent = "Results unavailable. Check that the API is running.";
+        resultsList.appendChild(item);
+      }
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const selected = new FormData(form).get("option");
+      if (!selected) return;
+
+      voteButton.disabled = true;
+      message.textContent = "Submitting your vote...";
+
+      try {
+        const response = await fetch(`${API_URL}/vote`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ option: selected })
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.detail?.[0]?.msg || data.detail || "Vote failed");
+        }
+
+        message.textContent = `Vote for ${data.option} recorded successfully!`;
+        form.reset();
+        await loadResults();
+      } catch (error) {
+        message.textContent =
+          `Could not submit vote: ${error.message}. Check the API and CORS settings.`;
+      } finally {
+        voteButton.disabled = false;
+      }
+    });
+
+    document.getElementById("refresh-button")
+      .addEventListener("click", loadResults);
+
+    loadResults();
+  </script>
+</body>
+</html>
